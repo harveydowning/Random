@@ -79,6 +79,9 @@ header {
     font-weight: bold;
     /* color: #fff !important; */
 }
+.navbar-light{
+    background-color: #fff;
+}
 
 .navbar-nav {
     /* border-left: 1px solid #fff; */
