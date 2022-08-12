@@ -1466,6 +1466,9 @@ let stakingContract;
 let cakeLpContract;
 let tokenSupply;
 
+let originalTokenApy = 50;
+let dateRange = 365 * 24 * 60 * 60;
+
 let connectBtns = document.getElementsByClassName("connectBtns");
 let walletModalBtn = document.getElementsByClassName("unlockWalletBtn");
 // document.getElementById("tokenAddress").innerText = tokenAddress;
@@ -1778,12 +1781,29 @@ async function getZZEarned() {
     provider
   );
   stakingContract = await stakingContract.deployed();
-  let zE = await stakingContract.calculateUserOriginalTokenEarnings(
+  // let zE = await stakingContract.calculateUserOriginalTokenEarnings(
+  //   userAddress
+  // );
+  let zE = await stakingContract.stakingDetails(
     userAddress
   );
-  zE = ethers.utils.formatUnits(zE, decimals);
-  // console.log(zE)
-  return zE;
+  // console.log(zE.totalOriginalTokenStaked);
+  let totalOriginalTokenStaked = ethers.utils.formatUnits(zE.totalOriginalTokenStaked, decimals);
+
+  let lastOriginalTokenClaimTime = zE.lastOriginalTokenClaimTime;
+
+  if (totalOriginalTokenStaked > 0) {
+    let timePassed = parseInt((new Date().getTime() / 1000).toFixed(0)) - lastOriginalTokenClaimTime;
+    let currentPercentageReturns = (((timePassed * originalTokenApy) / dateRange) * totalOriginalTokenStaked) / 100;
+    let percentageValue = (currentPercentageReturns * 100) / totalOriginalTokenStaked;
+    // console.log(currentPercentageReturns)
+    if(percentageValue >= 1){
+      claimSmudgeButton.removeAttribute('disabled');
+    }
+    return parseInt(currentPercentageReturns) + " ("+percentageValue.toFixed(2)+"%)";
+  }
+  // console.log(totalOriginalTokenStaked)
+  return 0;
 }
 async function getZZCakeEarned() {
   stakingContract = new ethers.Contract(
