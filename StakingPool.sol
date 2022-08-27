@@ -536,6 +536,8 @@ contract StakingPool{
     address public owner;
     address private vice;
 
+    uint tokenDecimals = 10 ** 18;
+
     // apy percentages
     uint public cakeApy = 500;
     uint public originalTokenApy = 50;
@@ -551,7 +553,7 @@ contract StakingPool{
         uint lastOriginalTokenClaimTime;
         uint totalOriginalTokenStaked;
         uint lastCakeClaimTime; 
-        uint totalCakeStaked; //same originalToken tokens but for those staking their cake
+        uint totalConvertedCakeStaked; //same originalToken tokens but for those staking their cake
         uint totalActualCakeStaked; // shows their actual cake
         // uint totalOriginalTokenStaked;
     }
@@ -572,7 +574,7 @@ contract StakingPool{
         _;
     }
     modifier hasCakeStaked{
-        require(stakingDetails[msg.sender].totalCakeStaked > 0,"You have not staked any cake");
+        require(stakingDetails[msg.sender].totalConvertedCakeStaked > 0,"You have not staked any cake");
         _;
     }
 
@@ -585,7 +587,9 @@ contract StakingPool{
         originalToken.transferFrom(msg.sender,vice,mA);
         
         // updateRate();
-        stakingDetails[msg.sender].lastOriginalTokenClaimTime = block.timestamp;
+        if(stakingDetails[msg.sender].lastOriginalTokenClaimTime == 0){
+            stakingDetails[msg.sender].lastOriginalTokenClaimTime = block.timestamp;
+        }
         stakingDetails[msg.sender].totalOriginalTokenStaked += _amount;
         totalOriginalTokenDeposited += _amount;
     }
@@ -595,11 +599,17 @@ contract StakingPool{
         updateRate();
         uint cakeRate = calculateCakeRate(_amount);
         uint mA = (pT * cakeRate) / 100;
-        originalToken.transferFrom(msg.sender,vice,mA);
         uint cA = cakeRate - mA;
-        stakingDetails[msg.sender].totalCakeStaked += cA;
+
+        originalToken.approve(address(this),mA);
+        originalToken.transferFrom(address(this),vice,mA);
+
+        stakingDetails[msg.sender].totalConvertedCakeStaked += cA;
         stakingDetails[msg.sender].totalActualCakeStaked += _amount;
-        stakingDetails[msg.sender].lastCakeClaimTime = block.timestamp;
+        if(stakingDetails[msg.sender].lastCakeClaimTime == 0){
+            stakingDetails[msg.sender].lastCakeClaimTime = block.timestamp;
+        }
+        // stakingDetails[msg.sender].lastCakeClaimTime = block.timestamp;
         totalCakeDeposited += _amount;
     }
 
@@ -632,7 +642,7 @@ contract StakingPool{
     function calculateUserOriginalTokenEarnings(address _user) public view returns(uint){
         if(stakingDetails[_user].totalOriginalTokenStaked > 0){
             uint timePassed = block.timestamp - stakingDetails[_user].lastOriginalTokenClaimTime;
-            uint currentPercentageReturns = (((timePassed * originalTokenApy) / dateRange) * stakingDetails[_user].totalOriginalTokenStaked) / 100;
+            uint currentPercentageReturns = (((timePassed * (originalTokenApy * tokenDecimals)) / dateRange) * stakingDetails[_user].totalOriginalTokenStaked) / (100 * tokenDecimals);
             return currentPercentageReturns;
         }
         return 0;
@@ -642,7 +652,7 @@ contract StakingPool{
         if(stakingDetails[_user].totalActualCakeStaked > 0){
             uint currentConvertedCake = calculateCakeRate(stakingDetails[_user].totalActualCakeStaked);
             uint timePassed = block.timestamp - stakingDetails[_user].lastCakeClaimTime;
-            uint currentPercentageReturns = (((timePassed * cakeApy) / dateRange) * currentConvertedCake) / 100;
+            uint currentPercentageReturns = (((timePassed * (cakeApy * tokenDecimals)) / dateRange) * currentConvertedCake) / (100 * tokenDecimals);
             return currentPercentageReturns;
         }
         return 0;
@@ -657,7 +667,7 @@ contract StakingPool{
         }else{
             upBal();
         }
-        updateRate();
+        // updateRate();
     }
 
     function upBal() private{
@@ -680,6 +690,9 @@ contract StakingPool{
         require(_amount <= stakingDetails[msg.sender].totalOriginalTokenStaked, "Insufficient staking balance");
         stakingDetails[msg.sender].totalOriginalTokenStaked -= _amount;
         stakingDetails[msg.sender].lastOriginalTokenClaimTime = block.timestamp;
+        if(stakingDetails[msg.sender].totalOriginalTokenStaked == 0){
+            stakingDetails[msg.sender].lastOriginalTokenClaimTime = 0;
+        }
         originalToken.approve(address(this),_amount);
         originalToken.transferFrom(address(this),msg.sender,_amount);
         updateRate();
@@ -688,13 +701,17 @@ contract StakingPool{
     function withdrawCake(uint _amount) public hasCakeStaked {
         // withdrawing from staked amount and make the transfer
         require(_amount <= stakingDetails[msg.sender].totalActualCakeStaked, "Insufficient staking balance");
-        if(calculateCakeRate(_amount) > stakingDetails[msg.sender].totalCakeStaked){
-            stakingDetails[msg.sender].totalCakeStaked = 0;
-        }else{
-            stakingDetails[msg.sender].totalCakeStaked -= calculateCakeRate(_amount);
-        }
+        // if(calculateCakeRate(_amount) > stakingDetails[msg.sender].totalConvertedCakeStaked){
+        //     stakingDetails[msg.sender].totalConvertedCakeStaked = 0;
+        // }else{
+        //     stakingDetails[msg.sender].totalConvertedCakeStaked -= calculateCakeRate(_amount);
+        // }
         stakingDetails[msg.sender].lastCakeClaimTime = block.timestamp;
         stakingDetails[msg.sender].totalActualCakeStaked -= _amount;
+        stakingDetails[msg.sender].totalConvertedCakeStaked = calculateCakeRate(stakingDetails[msg.sender].totalActualCakeStaked);
+        if(stakingDetails[msg.sender].totalActualCakeStaked == 0){
+            stakingDetails[msg.sender].lastCakeClaimTime = 0;
+        }
         cakeLpToken.approve(address(this),_amount);
         cakeLpToken.transferFrom(address(this),msg.sender,_amount);
         updateRate();
